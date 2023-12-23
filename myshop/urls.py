@@ -26,10 +26,10 @@ urlpatterns = [
     path('shop/', include('shop.urls')),
     
     path('about/', views.about, name='about'),
-    path('cart/', views.cart, name='cart'),
+    #path('cart/', views.cart, name='cart'),
     path('contact/', views.contact, name='contact'),
     #
-    path('product_list/', views.product_list, name='product_list'),
+    #path('product_list/', views.product_list, name='product_list'),
     #
-    path('single_product/', views.single_product, name='single_product'),
+    #path('single_product/', views.single_product, name='single_product'),
 ]

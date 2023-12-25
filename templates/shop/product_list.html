@@ -25,6 +25,7 @@
     <div class="container">
         <div class="row">
                 {% for product in object_list %}
+                {% if product.stock > 0 %}
 					<div class="col-12 col-lg-4 col-md-6 item">
                         <div class="card" style="width: 18rem;">
                             <form method="post" action="{% url 'add_item_to_cart' product.pk %}">
@@ -40,7 +41,7 @@
                                     <li class="list-group-item">
 										{% csrf_token %}
 										<label class="form-label" for="id_quantity">Quantity:</label>
-										<input type="number" name="quantity" value="1" min="1"
+										<input type="number" name="quantity" value="1" min="1" max="{{ product.stock }}"
 											   required id="id_quantity"/>
                                     </li>
                                 </ul>
@@ -58,6 +59,7 @@
                             </form>
                         </div>
                     </div>
+                {% endif %}
                 {% endfor %}
         </div>
     </div>

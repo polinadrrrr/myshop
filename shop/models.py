@@ -6,6 +6,7 @@ from django.utils import timezone
 import datetime
 from django.dispatch import receiver
 from django.db.models.signals import post_save, post_delete
+from django.core.exceptions import ValidationError
 
 
 # Create your models here.
@@ -14,6 +15,7 @@ class Product(models.Model):
     code = models.CharField(max_length=255, verbose_name='product_code')
     price = models.DecimalField(max_digits=20, decimal_places=2)
     unit = models.CharField(max_length=255, blank=True, null=True)
+    stock = models.PositiveIntegerField(default=0)
     image_url = models.URLField(blank=True, null=True)
     note = models.TextField(blank=True, null=True)
 
@@ -23,7 +25,9 @@ class Product(models.Model):
     
     #Отображение элемента в строке
     def __str__(self):
-        return f'{self.name} ({self.price})'
+        return f'{self.name} ({self.price}, {self.stock})'
+    
+    
 
 class Payment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -39,7 +43,7 @@ class Payment(models.Model):
     def __str__(self):
         return f'{self.user} ({self.amount})'
     
-    #Баланс по счёту указанного пользователя
+    #Метод, который позволяет получить баланс по счёту указанного пользователя
     @staticmethod
     def get_balance(user: User):
         amount = Payment.objects.filter(user=user).aggregate(Sum('amount'))['amount__sum']
@@ -69,7 +73,8 @@ class Order(models.Model):
     def __str__(self):
         return f'{self.user} ({self.amount}, {self.status})'
     
-    #Ищем корзину, если нет, то создаём. Корзина не перешедшая в статус Заказа и старше 7 дней будет удалена
+    #При выборе товара пользователем, товар в выбранном количестве добавляется в корзину Cart, которая создаётся автоматически при первом вызове метода get_cart(user)
+    #Корзина, не перешедшая в статус Заказа в течении 7 дней, автоматически удаляется при первом же вызове метода get_cart(user)
     @staticmethod
     def get_cart(user: User):
         cart = Order.objects.filter(user=user, status=Order.STATUS_CART).first()
@@ -80,14 +85,14 @@ class Order(models.Model):
             cart = Order.objects.create(user=user, status=Order.STATUS_CART, amount=0)
         return cart
     
-    #Считаем общую сумму
+    #Считаем общую сумму в корзине
     def get_amount(self):
         amount = decimal.Decimal(0)
         for item in self.orderitem_set.all():
             amount += item.amount
         return amount
     
-    #Если корзина не пустая, то меняем статус на "Ожидает оплату"
+    #После завершения набора/изменения Корзины и перехода к оплате, Корзина меняет статус (если она не пустая!) и становиться Заказом, ожидающим оплаты (waiting_for_payment)
     def make_order(self):
         items = self.orderitem_set.all()
         if items and self.status == Order.STATUS_CART:
@@ -95,7 +100,7 @@ class Order(models.Model):
             self.save()
             auto_payment_unpaid_orders(self.user)
     
-    #Смотрим общую сумму неоплаченных заказов (статус "Ожидает оплату")
+    #Метод, который позволяет получить общую сумму неоплаченных заказов (status=waiting_for_payment) по указанному пользователю
     @staticmethod
     def get_amount_of_unpaid_orders(user: User):
         amount = Order.objects.filter(user=user, status=Order.STATUS_WAITING_FOR_PAYMENT).aggregate(Sum('amount'))['amount__sum']
@@ -115,13 +120,19 @@ class OrderItem(models.Model):
     #Отображение элемента в строке
     def __str__(self):
         return f'{self.order} ({self.product})'
-    
-    #Считаем сумму продукта
+
+    #Считаем сумму товара
     @property
     def amount(self):
-        return self.quantity * (self.price - self.discount)
+        if self.discount > 0 and self.price > self.discount:
+            return self.quantity * (self.price - self.discount)
+        return self.quantity * self.price
 
-#Автоматически оплачиваем неоплаченные заказы, если на балансе достаточно средств (меняем статус на "Оплачено", создаём антиплатеж (оплата со знаком "-")) 
+
+#Смена статуса на waiting_for_payment автоматически запускает проверку баланса текущего пользователя. 
+#Если сумма баланса >= сумме заказа, то Заказ изменяет свой статус на оплаченный. 
+#При этом параллельно создаётся оплата, равная (минус) сумме заказа, что сразу же после оплаты уменьшает баланс счёта клиента на сумму заказа
+#Если внесённой суммы оплаты достаточно для оплаты нескольких заказов, ожидающих оплаты, то все эти заказы изменяют свой статус на оплаченный.
 @transaction.atomic()
 def auto_payment_unpaid_orders(user: User):
     unpaid_orders = Order.objects.filter(user=user, status=Order.STATUS_WAITING_FOR_PAYMENT)
@@ -133,21 +144,31 @@ def auto_payment_unpaid_orders(user: User):
         order.save()
         Payment.objects.create(user=user, amount=-order.amount, time=timezone.now(), comment=f'Payment for order {order}')
             
-#Пересчитываем сумму в корзине после изменения (добавления) количества или цены OrderItem
+#При каждом новом добавлении (удалении, изменении) количества (или цены) товара, общая сумма заказа автоматически пересчитывается
 @receiver(post_save, sender=OrderItem)
 def recalculate_order_amount_after_save(sender, instance, **kwargs):
     order = instance.order
     order.amount = order.get_amount()
     order.save()
 
-#Пересчитываем сумму в корзине после изменения (удаления) количества или цены OrderItem
 @receiver(post_delete, sender=OrderItem)
 def recalculate_order_amount_after_delete(sender, instance, **kwargs):
     order = instance.order
     order.amount = order.get_amount()
     order.save()
 
-#Смотрим кто пополнил баланс и, если можем, совершаем автоплатеж
+#При каждом добавлении (удалении, изменении) количества товара, остаток на складе уменьшается/увеличивается
+@receiver(post_save, sender=OrderItem)
+def update_stock_after_save(sender, instance, **kwargs):
+    instance.product.stock -= instance.quantity
+    instance.product.save()
+
+@receiver(post_delete, sender=OrderItem)
+def update_stock_after_delete(sender, instance, **kwargs):
+    instance.product.stock += instance.quantity
+    instance.product.save()
+
+#Внесение оплаты автоматически запускает механизм проверки всех неоплаченных заказов, начиная с самого старого. 
 @receiver(post_save, sender=Payment)
 def auto_payment(sender, instance, **kwargs):
     user = instance.user

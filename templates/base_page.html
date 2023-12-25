@@ -52,7 +52,7 @@
                                 </li>
                                 {% if user.is_staff %}
                                 <li class="nav-item">
-                                    <a class="nav-link" href="{% url 'contact' %}">Contact</a>
+                                    <a class="nav-link" href="{% url 'catalog' %}">Catalog</a>
                                 </li>
                                 {% endif %}
                                 <li class="nav-item dropdown">
@@ -69,8 +69,6 @@
                             </ul>
                         </div>
                         <div class="hearer_icon d-flex align-items-center">
-
-                            <a id="search_1" href="javascript:void(0)"><i class="ti-search"></i></a>
                             {% if user.is_authenticated %}
                             <a href="{% url 'cart' %}">
                                 <i class="flaticon-shopping-cart-black-shape"></i>
@@ -115,7 +113,7 @@
                             <a href="/">Home</a>
                             <a href="{% url 'about' %}">About</a>
                             <a href="{% url 'product_list' %}">Products</a>
-                            <a href="{% url 'contact' %}">Contact</a>
+                            <a href="{% url 'catalog' %}">Catalog</a>
                             {% if user.is_authenticated %}
                             <a href="{% url 'logout_user' %}">{{ user.username }}</a>
                             {% else %}

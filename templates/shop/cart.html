@@ -53,7 +53,9 @@
                             <td>
                                 <form method="post" action="{% url 'cart_delete_item' item.pk %}">
                                     {% csrf_token %}
-                                    <button type="submit" style="color: blue"><u>delete</u></button>
+                                    <div class="cupon_text float-right">
+                                    <button type="submit" class="btn_3">delete</button>
+                                    </div>
                                 </form>
                             </td>
                         </tr>

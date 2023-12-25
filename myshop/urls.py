@@ -27,7 +27,8 @@ urlpatterns = [
     
     path('about/', views.about, name='about'),
     #path('cart/', views.cart, name='cart'),
-    path('contact/', views.contact, name='contact'),
+    path('catalog/', views.catalog, name='catalog'),
+    path('product/<int:pk>/edit/', views.product_edit, name='product_edit'),
     #
     #path('product_list/', views.product_list, name='product_list'),
     #

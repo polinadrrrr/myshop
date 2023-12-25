@@ -32,7 +32,7 @@
                                 <div class="card-body">
                                     <h4 class="card-title">{{ product.name}}</h4>
                                     <p class="card-text">
-                                        {{ product.description }}
+                                        {{ product.note }}
                                     </p>
                                 </div>
                                 <ul class="list-group list-group-flush">
@@ -45,7 +45,14 @@
                                     </li>
                                 </ul>
                                 <div class="card-body">
-                                    <button class="learn-more-btn" type="submit">buy now</button>
+                                    {% if user.is_authenticated %}
+                                    <button class="btn_1" type="submit">buy now</button>
+                                    {% else %}
+                                    <a class="btn_1" href="{% url 'login_user' %}">buy now</a>
+                                    {% endif %}
+                                    {% if user.is_staff %}
+                                        <a class="btn_1" href="{% url 'product_edit' pk=product.pk %}">edit</a>
+                                    {% endif %}
                                     <br><br>
                                 </div>
                             </form>
